@@ -17,10 +17,10 @@
  */
 
 #include "err_shim.h"
-#include <errno.h>      // errno
 #include <png.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <sys/stat.h>
 #include <stdio.h>      // printf, fopen, fclose, fread
 #include <stdlib.h>     // malloc, EXIT_SUCCESS, EXIT_FAILURE, NULL
 #include <string.h>     // strerror
@@ -48,10 +48,9 @@ const int ROM_BUFFER_SIZE = 1024*1024;
 static inline int picNum2BaseAddress(int picNum);
 uint8_t *getFrame(uint8_t rom[], int frameNumber);
 static inline unsigned int interleaveBytes(uint8_t low, uint8_t high);
-void convert(uint8_t framesBuffer[], uint8_t saveBuffer[], uint8_t pixelBuffer[], int picNum);
-void writeImageFile(uint8_t pixelBuffer[], const char *filename);
+void convert(uint8_t rom[], uint8_t saveBuffer[], uint8_t pixelBuffer[], int picNum);
+void writeImageFile(uint8_t pixelBuffer[], const char *filename, const char *output_folder);
 void drawSpan(uint8_t pixelBuffer[], uint8_t *buffer, int x, int y);
-void readData(uint8_t *fileName, uint8_t *buffer, int offset);
 bool isGbRom(const uint8_t data[0x150]);
 bool isHkRom(const uint8_t rom[0x150]);
 static void usage(void);
@@ -90,12 +89,13 @@ int main(int argc, char *argv[])
 {
 	char *filename_save = NULL;
 	char *filename_rom = NULL;
+	char *output_folder = "Images/";
 	int rc;
 	struct MappedFile_s mSave = {0};
 	struct MappedFile_s mRom = {0};
 	uint8_t pixelBuffer[ROW_SIZE*HEIGHT];
 
-	while ((rc = getopt(argc, argv, "s:r:V")) != -1)
+	while ((rc = getopt(argc, argv, "s:r:o:V")) != -1)
 		switch (rc) {
 		case 's':
 			if (filename_save) {
@@ -110,6 +110,13 @@ int main(int argc, char *argv[])
 				return EXIT_FAILURE;
 			}
 			filename_rom = optarg;
+			break;
+		case 'o':
+			if (!output_folder) {
+				usage();
+				return EXIT_FAILURE;
+			}
+                output_folder = optarg;
 			break;
 		case 'V':
 			version();
@@ -170,7 +177,7 @@ int main(int argc, char *argv[])
 		else
 			snprintf(filename, 15, "DEL_%02d.png", slotNum);
 		filename[15] = '\0';
-		writeImageFile(pixelBuffer, filename);
+		writeImageFile(pixelBuffer, filename, output_folder);
 	}
 
 	// Return
@@ -324,11 +331,15 @@ void drawSpan(uint8_t pixelBuffer[], uint8_t *buffer, int x, int y) {
 	}
 }
 
-void writeImageFile(uint8_t pixelBuffer[], const char *filename)
+void writeImageFile(uint8_t pixelBuffer[], const char *filename, const char *output_folder)
 {
 	int y;
 	// open file
-	FILE *fp = fopen(filename, "wb");
+	mkdir(output_folder, 0700);
+	char result[100];
+	strcpy(result, output_folder);
+	strcat(result, filename);
+	FILE *fp = fopen(result, "wb");
 
 	png_structp png_ptr = png_create_write_struct
 		(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -387,7 +398,7 @@ void writeImageFile(uint8_t pixelBuffer[], const char *filename)
 
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s [-r rom.gb] -s save.sav\n",
+	fprintf(stderr, "usage: %s [-r rom.gb] [-o output_folder/path/] -s save.sav\n",
 		__progname
 	);
 	exit(EXIT_FAILURE);
